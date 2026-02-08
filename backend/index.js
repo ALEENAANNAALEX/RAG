@@ -38,8 +38,8 @@ process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
 });
 
+app.use(cors()); // Enable CORS for all origins
 app.use(express.json()); // for parsing JSON
-app.use(cors())
 app.use('/api', Routes)
 
 app.listen(PORT, async () => {
