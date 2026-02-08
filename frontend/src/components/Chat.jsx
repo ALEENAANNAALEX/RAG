@@ -4,13 +4,16 @@ import Header from './Header';
 import Footer from './Footer';
 
 const PdfQaBot = () => {
-    const API_URL = import.meta.env.VITE_API_URL
+    const API_URL = import.meta.env.VITE_API_URL;
     const [file, setFile] = useState(null);
     const [query, setQuery] = useState('');
     const [messages, setMessages] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [isQuerying, setIsQuerying] = useState(false);
     const [uploadStatus, setUploadStatus] = useState(null);
+
+    // Debugging log to see the URL in browser console
+    console.log("Current Backend URL:", API_URL);
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -44,11 +47,24 @@ const PdfQaBot = () => {
         const formData = new FormData();
         formData.append('file', file);
 
+        if (!API_URL || API_URL === 'undefined') {
+            setUploadStatus('error');
+            alert("Configuration Error: VITE_API_URL is not set in Vercel environment variables.");
+            setIsUploading(false);
+            return;
+        }
+
         try {
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData,
             });
+
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                const text = await response.text();
+                throw new Error(`Server returned non-JSON response. Status: ${response.status}. Body starts with: ${text.substring(0, 50)}`);
+            }
 
             const data = await response.json();
 
