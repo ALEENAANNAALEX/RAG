@@ -38,17 +38,7 @@ process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
 });
 
-app.use(cors({
-    origin: '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: '*',
-    credentials: true,
-    optionsSuccessStatus: 200
-}));
-
-// Explicit OPTIONS handler for all routes
-app.options('(.*)', cors());
-
+app.use(cors()); // Standard CORS handles all methods including OPTIONS by default
 app.use(express.json()); // for parsing JSON
 
 // Health Check Route
