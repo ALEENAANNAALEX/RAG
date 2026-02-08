@@ -1,0 +1,11 @@
+{
+    "name": "rag-monorepo",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "install-backend": "cd backend && npm install --legacy-peer-deps",
+        "install-frontend": "cd frontend && npm install --legacy-peer-deps",
+        "build": "cd backend && npm install --legacy-peer-deps",
+        "start": "cd backend && npm start"
+    }
+}
