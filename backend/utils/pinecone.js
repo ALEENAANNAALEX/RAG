@@ -32,7 +32,6 @@ const createIndex = async (name) => {
     // await pc.deleteIndex(process.env.PINECONE_INDEX)
     const pineconeIndex = await pc.createIndex({
         name,
-        vectorType: 'dense',
         dimension: 384,
         metric: 'cosine', // cosine distance metric compares different documents for similarity. This is often used to find similarities between different documents. The advantage is that the scores are normalized to [-1,1] range.
         spec: {
