@@ -40,11 +40,14 @@ process.on('uncaughtException', (error) => {
 
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: '*',
     credentials: true,
     optionsSuccessStatus: 200
 }));
+
+// Explicit OPTIONS handler for all routes
+app.options('*', cors());
 
 app.use(express.json()); // for parsing JSON
 
