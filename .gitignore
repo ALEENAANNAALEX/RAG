@@ -1,0 +1,9 @@
+node_modules/
+.env
+.DS_Store
+dist/
+build/
+temp_unzip/
+temp_rag_clone/
+*.zip
+*.log
