@@ -4,7 +4,11 @@ import Header from './Header';
 import Footer from './Footer';
 
 const PdfQaBot = () => {
-    const API_URL = import.meta.env.VITE_API_URL;
+    let API_URL = import.meta.env.VITE_API_URL;
+    if (API_URL && !API_URL.endsWith('/api')) {
+        API_URL = API_URL.endsWith('/') ? `${API_URL}api` : `${API_URL}/api`;
+    }
+
     const [file, setFile] = useState(null);
     const [query, setQuery] = useState('');
     const [messages, setMessages] = useState([]);
@@ -12,8 +16,8 @@ const PdfQaBot = () => {
     const [isQuerying, setIsQuerying] = useState(false);
     const [uploadStatus, setUploadStatus] = useState(null);
 
-    // Debugging log to see the URL in browser console
-    console.log("Current Backend URL:", API_URL);
+    // Debugging log to see the resolved URL in browser console
+    console.log("Resolved API Endpoint:", API_URL);
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
