@@ -38,8 +38,21 @@ process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
 });
 
-app.use(cors()); // Enable CORS for all origins
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 200
+}));
+
 app.use(express.json()); // for parsing JSON
+
+// Health Check Route
+app.get('/', (req, res) => {
+    res.status(200).json({ status: "healthy", message: "RAG Backend is running" });
+});
+
 app.use('/api', Routes)
 
 app.listen(PORT, async () => {
