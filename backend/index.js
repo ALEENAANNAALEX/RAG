@@ -46,9 +46,6 @@ app.use(cors({
 
 app.use(express.json()); // for parsing JSON
 
-// Explicitly handle OPTIONS preflight requests
-app.options('*', cors());
-
 // Health Check Route
 app.get('/', (req, res) => {
     res.status(200).json({ status: "healthy", message: "RAG Backend is running" });
