@@ -38,8 +38,16 @@ process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
 });
 
-app.use(cors()); // Standard CORS handles all methods including OPTIONS by default
+app.use(cors({
+    origin: '*', // Allow all origins (good for debugging)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json()); // for parsing JSON
+
+// Explicitly handle OPTIONS preflight requests
+app.options('*', cors());
 
 // Health Check Route
 app.get('/', (req, res) => {
@@ -47,6 +55,31 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api', Routes)
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found",
+        error: "NotFound"
+    });
+});
+
+// Global Error Handler (MUST BE LAST)
+app.use((err, req, res, next) => {
+    console.error("🔥 Global Error Handler:", err);
+
+    // Ensure CORS headers are present even on errors
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    res.status(err.status || 500).json({
+        success: false,
+        message: err.message || "Internal Server Error",
+        error: err.name || "Error"
+    });
+});
 
 app.listen(PORT, async () => {
     console.log(`🚀 Server started successfully at port no. ${PORT}...`)
