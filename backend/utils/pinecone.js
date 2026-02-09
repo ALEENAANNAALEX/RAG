@@ -29,11 +29,26 @@ const getIndex = () => {
 
 const createIndex = async (name) => {
     const pc = getPineconeClient()
-    // await pc.deleteIndex(process.env.PINECONE_INDEX)
+
+    try {
+        const description = await pc.describeIndex(name);
+        if (description.dimension !== 384) {
+            console.log(`⚠️ Dimension mismatch: Index has ${description.dimension}, but model requires 384. Recreating index...`);
+            await pc.deleteIndex(name);
+            // Wait a moment for deletion to propagate
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+            console.log('✅ Index exists with correct dimension.');
+            return pc.Index(name);
+        }
+    } catch (e) {
+        console.log(`ℹ️ Index "${name}" does not exist or error checking. Creating...`);
+    }
+
     const pineconeIndex = await pc.createIndex({
         name,
         dimension: 384,
-        metric: 'cosine', // cosine distance metric compares different documents for similarity. This is often used to find similarities between different documents. The advantage is that the scores are normalized to [-1,1] range.
+        metric: 'cosine',
         spec: {
             serverless: {
                 cloud: 'aws',
