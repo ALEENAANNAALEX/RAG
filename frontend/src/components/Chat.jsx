@@ -342,7 +342,7 @@ const PdfQaBot = () => {
                             <div style={styles.botBubble}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Loader2 className="animate-spin" size={16} />
-                                    <span>Gemini is analyzing...</span>
+                                    <span>Analyzing...</span>
                                 </div>
                             </div>
                         )}

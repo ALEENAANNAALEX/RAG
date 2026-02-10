@@ -32,8 +32,8 @@ const createIndex = async (name) => {
 
     try {
         const description = await pc.describeIndex(name);
-        if (description.dimension !== 384) {
-            console.log(`⚠️ Dimension mismatch: Index has ${description.dimension}, but model requires 384. Recreating index...`);
+        if (description.dimension !== 768) {
+            console.log(`⚠️ Dimension mismatch: Index has ${description.dimension}, but model requires 768. Recreating index...`);
             await pc.deleteIndex(name);
             // Wait a moment for deletion to propagate
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -47,7 +47,7 @@ const createIndex = async (name) => {
 
     const pineconeIndex = await pc.createIndex({
         name,
-        dimension: 384,
+        dimension: 768,
         metric: 'cosine',
         spec: {
             serverless: {
@@ -94,8 +94,8 @@ const storeVector = async (file, extension) => {
         throw new Error(`Embedding generation returned empty vectors (dimension 0). This usually indicates an API issue or invalid model name "${embeddings.modelName}".`);
     }
 
-    if (generatedEmbeddings[0].length !== 384) {
-        throw new Error(`Embedding dimension mismatch: Model returned ${generatedEmbeddings[0].length} but index expects 384.`);
+    if (generatedEmbeddings[0].length !== 768) {
+        throw new Error(`Embedding dimension mismatch: Model returned ${generatedEmbeddings[0].length} but index expects 768.`);
     }
 
     console.log(`📤 Storing to Pinecone index: ${process.env.PINECONE_INDEX}...`);

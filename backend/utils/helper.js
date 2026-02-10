@@ -12,74 +12,65 @@ if (!GEMINI_API_KEY) {
     console.log("✅ GEMINI_API_KEY loaded in helper.js");
 }
 
-// Local Embeddings using Transformers.js (Runs on your CPU, No API needed)
-class LocalEmbeddings {
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
+
+// Initialize APIs
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// Google Gemini Embeddings
+class GeminiEmbeddings {
     constructor() {
-        this.pipe = null;
+        this.model = genAI.getGenerativeModel({ model: "embedding-001" });
     }
-    async init() {
-        if (!this.pipe) {
-            console.log("📥 Loading local embedding model (feature-extraction)...");
-            this.pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-            console.log("✅ Local embedding model loaded.");
-        }
-    }
+
     async embedDocuments(texts) {
-        await this.init();
-        const results = [];
+        const embeddings = [];
         for (const text of texts) {
-            const output = await this.pipe(text, { pooling: 'mean', normalize: true });
-            results.push(Array.from(output.data));
+            const result = await this.model.embedContent(text);
+            const embedding = result.embedding;
+            embeddings.push(embedding.values);
         }
-        return results;
+        return embeddings;
     }
+
     async embedQuery(text) {
-        await this.init();
-        const output = await this.pipe(text, { pooling: 'mean', normalize: true });
-        return Array.from(output.data);
+        const result = await this.model.embedContent(text);
+        const embedding = result.embedding;
+        return embedding.values;
     }
 }
 
-export const embeddings = new LocalEmbeddings();
+export const embeddings = new GeminiEmbeddings();
 
-// Local QA using Transformers.js (Extracts specific answers from document chunks)
-let qaPipe = null;
+// Groq LLM (Llama 3) for Fast Answering
 export const llm = {
     async invoke(input) {
         const context = input.context || "";
         const question = input.question || "";
 
-        if (!context || !question) return { content: "I couldn't find relevant information." };
+        if (!context || !question) return { content: "I need more information." };
 
         try {
-            if (!qaPipe) {
-                console.log("📥 Loading local model...");
-                qaPipe = await pipeline('question-answering', 'Xenova/distilbert-base-cased-distilled-squad');
-                console.log("✅ Ready.");
-            }
+            const completion = await groq.chat.completions.create({
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a helpful assistant. Use the provided context to answer the user's question directly. If the answer is not in the context, say you don't know."
+                    },
+                    {
+                        role: "user",
+                        content: `Context: ${context}\n\nQuestion: ${question}`
+                    }
+                ],
+                model: "llama3-8b-8192",
+            });
 
-            // Limit context to avoid model truncation
-            const limitedContext = context.substring(0, 1500);
-
-            console.log("🧠 Processing...");
-            const result = await qaPipe(question, limitedContext);
-
-            // If we have a reasonably confident answer, return it with a bit of surrounding context
-            if (result && result.answer && result.score > 0.001) {
-                const answer = result.answer.trim();
-                // Find where the answer is in the context to show more surrounding text
-                const startIdx = Math.max(0, context.indexOf(answer) - 100);
-                const endIdx = Math.min(context.length, context.indexOf(answer) + answer.length + 300);
-                const enrichedAnswer = context.substring(startIdx, endIdx).trim();
-
-                return { content: enrichedAnswer + "..." };
-            }
-
-            // Fallback: Return a larger chunk of the relevant text
-            return { content: context.substring(0, 1200).trim() + "..." };
+            return { content: completion.choices[0]?.message?.content || "No response generated." };
         } catch (err) {
-            console.error("❌ Local Error:", err);
-            return { content: "I found the document but couldn't extract the exact answer." };
+            console.error("❌ Groq Error:", err);
+            return { content: "Error generating answer." };
         }
     }
 };
