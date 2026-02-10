@@ -4,45 +4,59 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
 import { TextLoader } from 'langchain/document_loaders/fs/text';
-
-const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim()
-if (!GEMINI_API_KEY) {
-    console.error("❌ GEMINI_API_KEY is missing in helper.js!");
-} else {
-    console.log("✅ GEMINI_API_KEY loaded in helper.js");
-}
-
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 
-// Initialize APIs
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+console.log("🔹 Loading helper.js - Version: LOCAL-GROQ-V2");
 
-// Google Gemini Embeddings
-class GeminiEmbeddings {
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
+
+if (!GROQ_API_KEY) {
+    console.error("❌ GROQ_API_KEY is missing! Chat will fail.");
+} else {
+    console.log("✅ GROQ_API_KEY loaded.");
+}
+
+const groq = new Groq({ apiKey: GROQ_API_KEY });
+
+// Local Embeddings using Transformers.js (Runs on your CPU, No API needed)
+// This avoids Google API 404 errors completely.
+class LocalEmbeddings {
     constructor() {
-        this.model = genAI.getGenerativeModel({ model: "embedding-001" });
+        this.pipe = null;
+        this.modelName = "Xenova/all-MiniLM-L6-v2";
     }
-
-    async embedDocuments(texts) {
-        const embeddings = [];
-        for (const text of texts) {
-            const result = await this.model.embedContent(text);
-            const embedding = result.embedding;
-            embeddings.push(embedding.values);
+    async init() {
+        if (!this.pipe) {
+            console.log("📥 Loading local embedding model (feature-extraction)...");
+            try {
+                this.pipe = await pipeline('feature-extraction', this.modelName);
+                console.log("✅ Local embedding model loaded successfully.");
+            } catch (err) {
+                console.error("❌ Failed to load local embedding model:", err);
+                throw err;
+            }
         }
-        return embeddings;
     }
-
+    async embedDocuments(texts) {
+        console.log(`🧠 embedDocuments called with ${texts.length} texts`);
+        await this.init();
+        const results = [];
+        for (const text of texts) {
+            const output = await this.pipe(text, { pooling: 'mean', normalize: true });
+            results.push(Array.from(output.data));
+        }
+        return results;
+    }
     async embedQuery(text) {
-        const result = await this.model.embedContent(text);
-        const embedding = result.embedding;
-        return embedding.values;
+        console.log(`🧠 embedQuery called for query: "${text.substring(0, 20)}..."`);
+        await this.init();
+        const output = await this.pipe(text, { pooling: 'mean', normalize: true });
+        return Array.from(output.data);
     }
 }
 
-export const embeddings = new GeminiEmbeddings();
+export const embeddings = new LocalEmbeddings();
 
 // Groq LLM (Llama 3) for Fast Answering
 export const llm = {
@@ -52,6 +66,7 @@ export const llm = {
 
         if (!context || !question) return { content: "I need more information." };
 
+        console.log("🤖 Sending query to Groq...");
         try {
             const completion = await groq.chat.completions.create({
                 messages: [
@@ -64,13 +79,13 @@ export const llm = {
                         content: `Context: ${context}\n\nQuestion: ${question}`
                     }
                 ],
-                model: "llama3-8b-8192",
+                model: "llama3-70b-8192",
             });
-
+            console.log("✅ Groq response received.");
             return { content: completion.choices[0]?.message?.content || "No response generated." };
         } catch (err) {
             console.error("❌ Groq Error:", err);
-            return { content: "Error generating answer." };
+            return { content: `Groq Error: ${err.message || "Unknown error"}` };
         }
     }
 };
@@ -92,9 +107,7 @@ const loadData = async (file, extension) => {
         default:
             throw Error('Unsupported file type')
     }
-    // const loader = new PDFLoader(file);
     const documents = await loader.load()
-    // console.log(documents)
     return documents
 }
 

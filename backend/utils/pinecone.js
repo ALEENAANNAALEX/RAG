@@ -2,9 +2,6 @@ import { Pinecone } from "@pinecone-database/pinecone";
 import 'dotenv/config'
 import { PineconeStore } from "@langchain/pinecone";
 import { loadData, splitData, llm, embeddings } from "./helper.js";
-import { StringOutputParser } from "@langchain/core/output_parsers"
-import { PromptTemplate } from "@langchain/core/prompts";
-import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
 
 let client = null
 
@@ -32,13 +29,14 @@ const createIndex = async (name) => {
 
     try {
         const description = await pc.describeIndex(name);
-        if (description.dimension !== 768) {
-            console.log(`⚠️ Dimension mismatch: Index has ${description.dimension}, but model requires 768. Recreating index...`);
+        // Force dimension 384 for Local Embeddings
+        if (description.dimension !== 384) {
+            console.log(`⚠️ Dimension mismatch: Index has ${description.dimension}, but model requires 384. Recreating index...`);
             await pc.deleteIndex(name);
             // Wait a moment for deletion to propagate
             await new Promise(resolve => setTimeout(resolve, 2000));
         } else {
-            console.log('✅ Index exists with correct dimension.');
+            console.log('✅ Index exists with correct dimension (384).');
             return pc.Index(name);
         }
     } catch (e) {
@@ -47,7 +45,7 @@ const createIndex = async (name) => {
 
     const pineconeIndex = await pc.createIndex({
         name,
-        dimension: 768,
+        dimension: 384,
         metric: 'cosine',
         spec: {
             serverless: {
@@ -91,11 +89,12 @@ const storeVector = async (file, extension) => {
     console.log(`✅ Generated ${generatedEmbeddings.length} embeddings.`);
 
     if (generatedEmbeddings.length === 0 || generatedEmbeddings[0].length === 0) {
-        throw new Error(`Embedding generation returned empty vectors (dimension 0). This usually indicates an API issue or invalid model name "${embeddings.modelName}".`);
+        throw new Error(`Embedding generation returned empty vectors (dimension 0).`);
     }
 
-    if (generatedEmbeddings[0].length !== 768) {
-        throw new Error(`Embedding dimension mismatch: Model returned ${generatedEmbeddings[0].length} but index expects 768.`);
+    // Double check dimension before upload
+    if (generatedEmbeddings[0].length !== 384) {
+        throw new Error(`Embedding dimension mismatch: Model returned ${generatedEmbeddings[0].length} but index expects 384.`);
     }
 
     console.log(`📤 Storing to Pinecone index: ${process.env.PINECONE_INDEX}...`);
@@ -122,7 +121,7 @@ const retrieveVector = async (userQuery) => {
     const docs = await retriever.invoke(userQuery);
     const context = docs.map(d => d.pageContent).join("\n\n");
 
-    console.log(`🤖 Generating local response...`);
+    console.log(`🤖 Generating Groq response...`);
     const response = await llm.invoke({
         question: userQuery,
         context: context,
