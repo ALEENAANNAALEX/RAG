@@ -79,7 +79,7 @@ export const llm = {
                         content: `Context: ${context}\n\nQuestion: ${question}`
                     }
                 ],
-                model: "llama3-70b-8192",
+                model: "llama-3.3-70b-versatile",
             });
             console.log("✅ Groq response received.");
             return { content: completion.choices[0]?.message?.content || "No response generated." };
