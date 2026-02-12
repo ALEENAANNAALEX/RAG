@@ -9,7 +9,7 @@ const Footer = () => {
             fontSize: '0.9rem',
             letterSpacing: '0.05em'
         }}>
-            <p>© 2026 IntelliQuest • Powered by Gemini & Pinecone</p>
+            <p>© 2026 IntelliQuest </p>
         </div>
     )
 }

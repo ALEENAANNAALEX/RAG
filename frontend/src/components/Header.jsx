@@ -36,7 +36,7 @@ const Header = () => {
                 margin: '0 auto',
                 lineHeight: '1.6'
             }}>
-                Next-generation document intelligence. Upload your files and let Gemini find the answers for you instantly.
+                Next-generation document intelligence. Upload your files and let AI find the answers for you instantly.
             </p>
         </div>
     );
