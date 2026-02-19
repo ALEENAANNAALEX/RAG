@@ -60,75 +60,144 @@ const createIndex = async (name) => {
     return pineconeIndex
 }
 
-const storeVector = async (file, extension) => {
-    console.log(`📂 Starting vector storage for ${extension} file...`);
-    const docs = await loadData(file, extension)
-    console.log(`📄 Data loaded: ${docs.length} documents.`);
+const storeDocs = async (docs, clearNamespace = false) => {
+    console.log(`📄 Processing ${docs.length} documents.`);
     const splittedDocs = await splitData(docs)
     console.log(`✂️ Data split into ${splittedDocs.length} chunks.`);
 
     if (splittedDocs.length === 0) {
-        throw new Error("No valid text content could be extracted from the file. Please check if the file is empty or contains only images/scanned text.");
+        console.warn("⚠️ No chunks generated from documents.");
+        return;
     }
 
     const pineconeIndex = getIndex()
+    const namespace = process.env.PINECONE_NAMESPACE || 'qa-bot-namespace';
 
-    const namespace = process.env.PINECONE_NAMESPACE || 'default';
-    console.log(`🧹 Clearing namespace: ${namespace}`);
-    try {
-        await pineconeIndex.namespace(namespace).deleteAll()
-    } catch (e) {
-        console.log("⚠️ Namespace clear skipped (might be empty or new)");
+    if (clearNamespace) {
+        console.log(`🧹 Clearing namespace: ${namespace}`);
+        try {
+            await pineconeIndex.namespace(namespace).deleteAll()
+        } catch (e) {
+            console.log("⚠️ Namespace clear skipped");
+        }
     }
 
-    console.log(`📤 Generating embeddings for ${splittedDocs.length} chunks...`);
-    // Generate embeddings manually to verify they are not empty
-    const documentTexts = splittedDocs.map(doc => doc.pageContent);
-    const generatedEmbeddings = await embeddings.embedDocuments(documentTexts);
-
-    console.log(`✅ Generated ${generatedEmbeddings.length} embeddings.`);
-
-    if (generatedEmbeddings.length === 0 || generatedEmbeddings[0].length === 0) {
-        throw new Error(`Embedding generation returned empty vectors (dimension 0).`);
-    }
-
-    // Double check dimension before upload
-    if (generatedEmbeddings[0].length !== 384) {
-        throw new Error(`Embedding dimension mismatch: Model returned ${generatedEmbeddings[0].length} but index expects 384.`);
-    }
-
-    console.log(`📤 Storing to Pinecone index: ${process.env.PINECONE_INDEX}...`);
-    const vectorStore = await PineconeStore.fromDocuments(splittedDocs, embeddings, {
+    console.log(`📤 Storing to Pinecone (Namespace: ${namespace})...`);
+    await PineconeStore.fromDocuments(splittedDocs, embeddings, {
         pineconeIndex,
         namespace: namespace,
     })
-    console.log('✅ Vectors stored successfully...')
+    console.log('✅ Documents stored successfully...')
+}
+
+const storeVector = async (file, extension) => {
+    console.log(`� Starting vector storage for ${extension} file...`);
+    const docs = await loadData(file, extension)
+    await storeDocs(docs, true); // Clear namespace on file upload
+}
+
+const getRelevantContext = async (userQuery) => {
+    try {
+        const pineconeIndex = getIndex()
+        const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+            pineconeIndex,
+            namespace: process.env.PINECONE_NAMESPACE || 'qa-bot-namespace',
+        })
+
+        const retriever = vectorStore.asRetriever({ k: 3 })
+        console.log(`🔍 Searching Knowledge Base for: "${userQuery}"`);
+        const docs = await retriever.invoke(userQuery);
+        return docs.map(d => d.pageContent).join("\n\n");
+    } catch (error) {
+        console.error("⚠️ Error fetching context from Knowledge Base:", error);
+        return ""; // Return empty context on error
+    }
 }
 
 const retrieveVector = async (userQuery) => {
-    const pineconeIndex = getIndex()
-
-    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
-        pineconeIndex,
-        namespace: process.env.PINECONE_NAMESPACE,
-    })
-
-    const retriever = vectorStore.asRetriever({
-        k: 3,
-    })
-
-    console.log(`🔍 Retrieving context for: "${userQuery}"`);
-    const docs = await retriever.invoke(userQuery);
-    const context = docs.map(d => d.pageContent).join("\n\n");
+    const context = await getRelevantContext(userQuery);
 
     console.log(`🤖 Generating Groq response...`);
     const response = await llm.invoke({
         question: userQuery,
-        context: context,
+        context: context || "No specific background knowledge found. Use your general knowledge.",
     });
 
     // Handle both mock object response and real string response
     return response.content || response;
 }
 
-export { createIndex, storeVector, getPineconeClient, getIndex, retrieveVector };
+const saveChatMessage = async (sessionId, role, content) => {
+    try {
+        const pineconeIndex = getIndex();
+        const namespace = process.env.CHAT_NAMESPACE || 'chat-history';
+        const timestamp = Date.now();
+        const id = `${sessionId}_${timestamp}_${Math.random().toString(36).substring(7)}`;
+
+        console.log(`🧩 Preparing vector for ID: ${id} in namespace: ${namespace}`);
+
+        // Truncate only for the embedding vector (model limit), but keep full metadata
+        const storageLimit = 500;
+        const vectorContent = content.length > storageLimit ? content.substring(0, storageLimit) : content;
+        const vector = await embeddings.embedQuery(vectorContent);
+
+        console.log(`📤 Upserting to Pinecone...`);
+        await pineconeIndex.namespace(namespace).upsert([{
+            id,
+            values: vector,
+            metadata: {
+                sessionId,
+                role,
+                content, // FULL content stored here
+                timestamp
+            }
+        }]);
+        console.log(`✅ [${role.toUpperCase()}] ID ${id} saved successfully.`);
+    } catch (error) {
+        console.error(`❌ Error in saveChatMessage:`, error);
+        throw error;
+    }
+}
+
+const getChatHistory = async (sessionId) => {
+    const pineconeIndex = getIndex();
+    const namespace = process.env.CHAT_NAMESPACE || 'chat-history';
+
+    console.log(`📡 Fetching chat history from Pinecone (Session: ${sessionId})`);
+
+    // We use a zero vector for query if we just want metadata filtering
+    // and don't care about semantic similarity here
+    const zeroVector = new Array(384).fill(0);
+
+    const queryResponse = await pineconeIndex.namespace(namespace).query({
+        vector: zeroVector,
+        filter: { sessionId: { "$eq": sessionId } },
+        topK: 100,
+        includeMetadata: true
+    });
+
+    const messages = queryResponse.matches
+        .map(match => match.metadata)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(meta => ({ role: meta.role, content: meta.content }));
+
+    return messages;
+}
+
+const deleteChatHistory = async (sessionId) => {
+    const pineconeIndex = getIndex();
+    const namespace = process.env.CHAT_NAMESPACE || 'chat-history';
+
+    console.log(`🧹 Deleting chat history from Pinecone (Session: ${sessionId})`);
+
+    // In serverless, we can delete by filter
+    try {
+        await pineconeIndex.namespace(namespace).deleteMany({
+            sessionId: { "$eq": sessionId }
+        });
+    } catch (e) {
+        console.error("❌ Delete historical chat error:", e.message);
+    }
+}
+
+export { createIndex, storeVector, storeDocs, getPineconeClient, getIndex, retrieveVector, saveChatMessage, getChatHistory, deleteChatHistory, getRelevantContext };

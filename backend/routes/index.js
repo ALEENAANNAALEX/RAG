@@ -1,5 +1,8 @@
 import express from 'express'
 import { getQueryResponse, uploadFile } from '../controllers/index.js'
+import { generalChat, clearChatHistory, fetchChatHistory } from '../controllers/chat.js'
+import { syncWebsiteContent } from '../controllers/scraper.js'
+import { submitContact } from '../controllers/contact.js'
 import multer from 'multer'
 import { fileFilter, HTTP_STATUS_CODE } from '../utils/helper.js'
 
@@ -14,6 +17,11 @@ const upload = multer({
 })
 
 router.post('/query', getQueryResponse)
+router.post('/sync', syncWebsiteContent)
+router.post('/contact', submitContact)
+router.post('/chat', generalChat)
+router.post('/chat/clear', clearChatHistory)
+router.get('/chat/history/:sessionId', fetchChatHistory)
 router.post('/upload', (req, res, next) => {
     upload.single("file")(req, res, (err) => {
         if (err instanceof multer.MulterError) {
@@ -29,7 +37,7 @@ router.post('/upload', (req, res, next) => {
                 message: "File upload error",
                 error: err?.message ?? JSON.stringify(err),
             });
-        } 
+        }
         else if (err) {
             return res.status(HTTP_STATUS_CODE.UNSUPPORTED_MEDIA_TYPE).json({
                 success: false,

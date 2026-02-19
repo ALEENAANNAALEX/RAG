@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Upload, Send, FileText, MessageCircle, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
-import Header from './Header';
-import Footer from './Footer';
 
 const PdfQaBot = () => {
     let API_URL = import.meta.env.VITE_API_URL;
@@ -124,10 +122,9 @@ const PdfQaBot = () => {
     const styles = {
         container: {
             minHeight: '100vh',
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
             color: '#f8fafc',
             fontFamily: "'Inter', system-ui, sans-serif",
-            padding: '2rem 1rem',
+            padding: '8rem 1rem 4rem',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center'
@@ -283,7 +280,7 @@ const PdfQaBot = () => {
             }} />
 
             <div style={{ ...styles.wrapper, position: 'relative', zIndex: 1 }}>
-                <Header />
+                {/* Header removed as Navbar is present */}
 
                 {/* Glassmorphic Upload Card */}
                 <div style={styles.glassCard}>
@@ -366,7 +363,7 @@ const PdfQaBot = () => {
                     </form>
                 </div>
 
-                <Footer />
+                {/* Footer removed as App.jsx handles it */}
             </div>
 
             <style>{`

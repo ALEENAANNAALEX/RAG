@@ -3,6 +3,12 @@ import { storeVector, createIndex } from './utils/pinecone.js';
 import express from 'express'
 import { router as Routes } from './routes/index.js';
 import cors from 'cors'
+import mongoose from 'mongoose';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express()
 const PINECONE_INDEX = process.env.PINECONE_INDEX
@@ -11,7 +17,11 @@ const PORT = process.env.PORT || 3000
 async function setup() {
     console.log("📋 Starting setup...");
     try {
-        console.log("🔧 Creating/checking Pinecone index:", PINECONE_INDEX);
+        // 🍃 MongoDB Connection
+        const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/intelai-db';
+        await mongoose.connect(MONGODB_URI);
+        console.log("🍃 Connected to MongoDB Compass successfully...");
+
         // ✅ Create index only once (if it doesn't exist)
         await createIndex(PINECONE_INDEX)
         console.log("🚀 Setup complete successfully...")
@@ -38,19 +48,6 @@ process.on('uncaughtException', (error) => {
     console.error('⚠️ Uncaught Exception:', error);
 });
 
-// CRITICAL: Set CORS headers on EVERY response (even errors)
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    // Handle preflight
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
-
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -59,21 +56,37 @@ app.use(cors({
 
 app.use(express.json()); // for parsing JSON
 
-// Health Check Route
-app.get('/', (req, res) => {
-    res.status(200).json({ status: "healthy", message: "RAG Backend is running" });
+// Request Logging Middleware
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api')) {
+        console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    }
+    next();
 });
 
-app.use('/api', Routes)
+global.SERVER_ID = new Date().toISOString();
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: "healthy", serverId: global.SERVER_ID });
+});
 
-// 404 Handler
+// API Routes
+app.use('/api', Routes);
+
+// Serve Static Frontend Files
+const frontendPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(frontendPath));
+
+// Handle React Routing (Catch-all for non-API routes)
+// Express 5 requires regex or named parameters for wildcard
+// Express 5 requires regex or named parameters for wildcard
+// Using app.use() as a catch-all for any request method
 app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: "Route not found",
-        error: "NotFound"
-    });
+    // console.log("⚠️ Catch-all hit:", req.method, req.url);
+    res.sendFile(path.join(frontendPath, 'index.html'));
 });
+
+// 404 Handler (Removed as catch-all handles usage)
+// app.use((req, res) => { ... });
 
 // Global Error Handler (MUST BE LAST)
 app.use((err, req, res, next) => {
@@ -93,6 +106,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, async () => {
     console.log(`🚀 Server started successfully at port no. ${PORT}...`)
+    console.log(`🆔 Process ID: ${process.pid} | 🕒 Start Time: ${global.SERVER_ID}`);
     await setup().catch(err => {
         console.error("❌ Setup error:", err.message);
     });

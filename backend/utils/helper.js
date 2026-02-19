@@ -72,7 +72,7 @@ export const llm = {
                 messages: [
                     {
                         role: "system",
-                        content: "You are a helpful assistant. Use the provided context to answer the user's question directly. If the answer is not in the context, say you don't know."
+                        content: "You are a helpful assistant. Use the provided context to answer the user's question directly. Do not use markdown formatting like hash symbols (#). Use newlines for structure."
                     },
                     {
                         role: "user",

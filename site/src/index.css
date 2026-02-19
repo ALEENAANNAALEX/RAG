@@ -1,28 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-@import "tailwindcss";
-
 :root {
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+
   color-scheme: dark;
   color: #f3f4f6;
   background-color: #0a0a0b;
-}
 
-* {
-  margin: 0;
-  padding: 0%;
-  box-sizing: border-box;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
+  display: flex;
+  place-items: center;
   min-width: 320px;
   min-height: 100vh;
   overflow-x: hidden;
-  background-color: #0a0a0b;
+}
+
+#root {
+  width: 100%;
+  margin: 0 auto;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 .glass {
@@ -48,8 +56,6 @@ body {
   border: none;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  text-decoration: none;
-  display: inline-block;
 }
 
 .btn-primary:hover {
@@ -60,7 +66,7 @@ body {
 .page-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 5rem 2rem 2rem;
+  padding: 8rem 2rem 4rem;
   min-height: 100vh;
 }
 

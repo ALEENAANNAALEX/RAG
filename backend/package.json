@@ -9,7 +9,7 @@
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Surya",
+  "author": "Aleena Anna Alex & Surya",
   "license": "ISC",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -21,6 +21,8 @@
     "@langchain/textsplitters": "^0.1.0",
     "@pinecone-database/pinecone": "^4.0.0",
     "@xenova/transformers": "^2.17.2",
+    "axios": "^1.13.5",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
     "d3-dsv": "^2.0.0",
@@ -28,6 +30,7 @@
     "express": "^5.1.0",
     "groq-sdk": "^0.37.0",
     "langchain": "^0.3.34",
+    "mongoose": "^9.2.1",
     "multer": "^2.0.2",
     "nodemon": "^3.1.10",
     "pdf-parse": "^1.1.1"
