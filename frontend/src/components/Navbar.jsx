@@ -1,10 +1,33 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, Menu, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Sparkles, Menu, X, User, LogOut } from 'lucide-react';
 
 const Navbar = () => {
     const [isOpen, setIsOpen] = React.useState(false);
+    const [user, setUser] = React.useState(null);
     const location = useLocation();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        // Check if user is logged in
+        const userData = localStorage.getItem('user');
+        if (userData) {
+            setUser(JSON.parse(userData));
+        }
+    }, [location]);
+
+    const handleLogout = () => {
+        // Clear authentication data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Clear all AI chat history and session
+        localStorage.removeItem('chatMessages');
+        localStorage.removeItem('chatSessionId');
+        
+        setUser(null);
+        navigate('/');
+    };
 
     const navLinks = [
         { name: 'Home', path: '/' },
@@ -52,9 +75,71 @@ const Navbar = () => {
                     ))}
                 </div>
 
-                <Link to="/ai-chat" className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-                    Get Started
-                </Link>
+                {/* Auth Buttons */}
+                {user ? (
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }} className="desktop-nav">
+                        <div style={{ 
+                            color: '#9ca3af', 
+                            fontSize: '0.9rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                        }}>
+                            <User size={16} />
+                            {user.name}
+                            {user.hasSubscription && (
+                                <span style={{
+                                    background: 'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600
+                                }}>PRO</span>
+                            )}
+                        </div>
+                        <button 
+                            onClick={handleLogout}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                color: 'white',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                            <LogOut size={16} />
+                            Logout
+                        </button>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', gap: '1rem' }} className="desktop-nav">
+                        <Link 
+                            to="/login" 
+                            style={{
+                                textDecoration: 'none',
+                                color: 'white',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                fontSize: '0.9rem',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            Login
+                        </Link>
+                        <Link to="/signup" className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
+                            Sign Up
+                        </Link>
+                    </div>
+                )}
             </div>
 
             {/* Mobile Menu Toggle */}

@@ -160,7 +160,7 @@ const About = () => {
                             fontSize: '2rem',
                             fontWeight: 'bold'
                         }}>A</div>
-                        <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 700 }}>Ryan Mitchell</h3>
+                        <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 700 }}>Aleena</h3>
                         <p style={{ color: '#10b981', fontWeight: 600, marginBottom: '0.75rem' }}>Co-Founder & CEO</p>
                         <p style={{ color: '#9ca3af', fontSize: '0.9rem', lineHeight: '1.5' }}>
                             Visionary behind Intel AI, dedicated to reshaping how humans interact with information.

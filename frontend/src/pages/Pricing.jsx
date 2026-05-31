@@ -1,10 +1,51 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Pricing = () => {
     const [billingCycle, setBillingCycle] = useState('monthly');
+    const navigate = useNavigate();
+
+    const handlePlanSelection = (plan) => {
+        // Check if user is logged in
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+            // Redirect to signup if not logged in
+            navigate('/signup');
+            return;
+        }
+
+        // Map plans to package IDs
+        const packageMap = {
+            'Starter': 'free',
+            'Pro': 'pro',
+            'Enterprise': 'enterprise'
+        };
+
+        const packageId = packageMap[plan.name];
+
+        if (packageId === 'free') {
+            // Free plan - just go to AI Chat
+            navigate('/ai-chat');
+        } else if (packageId) {
+            // Paid plans - go to payment
+            navigate('/payment', { 
+                state: { 
+                    package: {
+                        id: packageId,
+                        name: plan.name,
+                        price: parseFloat(plan.price.replace('$', '')) || 0,
+                        duration: 30
+                    }
+                }
+            });
+        } else {
+            // Contact sales for custom
+            navigate('/contact');
+        }
+    };
 
     const plans = [
         {
@@ -12,26 +53,26 @@ const Pricing = () => {
             price: billingCycle === 'monthly' ? "$0" : "$0",
             description: "Perfect for students and individuals exploring RAG technology.",
             features: [
-                "100 document uploads",
-                "Standard AI models (Groq Llama)",
+                "2 document uploads",
+                "Knowledge base queries only",
                 "Basic document parsing",
                 "Community support",
-                "50 queries per day"
+                "10 chats per day"
             ],
             color: "rgba(148, 163, 184, 0.1)",
             accent: "#94a3b8"
         },
         {
             name: "Pro",
-            price: billingCycle === 'monthly' ? "$49" : "$39",
-            description: "Advanced tools for professionals and small teams.",
+            price: billingCycle === 'monthly' ? "$29.99" : "$24.99",
+            description: "Full access for professionals and teams.",
             features: [
                 "Unlimited document uploads",
-                "Premium models (GPT-4, Claude 3)",
-                "Advanced OCR & Table parsing",
+                "Unlimited AI conversations",
+                "Full knowledge base access",
                 "Priority email support",
-                "Unlimited daily queries",
-                "API Access (5k calls/mo)"
+                "Advanced document parsing",
+                "API Access"
             ],
             color: "rgba(59, 130, 246, 0.1)",
             accent: "#3b82f6",
@@ -185,8 +226,8 @@ const Pricing = () => {
                             ))}
                         </div>
 
-                        <Link
-                            to={plan.price === 'Custom' ? '/contact' : '/ai-chat'}
+                        <button
+                            onClick={() => handlePlanSelection(plan)}
                             className={plan.popular ? "btn-primary" : ""}
                             style={{
                                 width: '100%',
@@ -203,7 +244,7 @@ const Pricing = () => {
                             }}
                         >
                             {plan.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
-                        </Link>
+                        </button>
                     </motion.div>
                 ))}
             </div>

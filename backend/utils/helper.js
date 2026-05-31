@@ -72,14 +72,15 @@ export const llm = {
                 messages: [
                     {
                         role: "system",
-                        content: "You are a helpful assistant. Use the provided context to answer the user's question directly. Do not use markdown formatting like hash symbols (#). Use newlines for structure."
+                        content: "You are a strict document reader. CRITICAL RULES:\n1. Answer ONLY from the provided Context below - nothing else\n2. Do NOT use any external knowledge, training data, or general information\n3. Do NOT expand, elaborate, or add examples not in the Context\n4. If the exact answer is not in the Context, respond: 'This information is not available in the uploaded document.'\n5. Quote or paraphrase ONLY what is explicitly stated in the Context\n6. Do not use markdown formatting like hash symbols (#)"
                     },
                     {
                         role: "user",
-                        content: `Context: ${context}\n\nQuestion: ${question}`
+                        content: `Context from uploaded document:\n${context}\n\nQuestion: ${question}\n\nSTRICT INSTRUCTION: Use ONLY the information above. Do not add anything from your knowledge.`
                     }
                 ],
                 model: "llama-3.3-70b-versatile",
+                temperature: 0.1,
             });
             console.log("✅ Groq response received.");
             return { content: completion.choices[0]?.message?.content || "No response generated." };
@@ -139,6 +140,8 @@ const fileFilter = (req, file, cb) => {
 
 export const HTTP_STATUS_CODE = {
     BAD_REQUEST: 400,
+    UNAUTHORIZED: 401,
+    FORBIDDEN: 403,
     INTERNAL_SERVER_ERROR: 500,
     OK: 200,
     CREATED: 201,

@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { storeVector, createIndex } from './utils/pinecone.js';
 import express from 'express'
 import { router as Routes } from './routes/index.js';
+import { aiChatRouter } from './routes/aiChatRoutes.js'; // NEW AI Chat API
 import cors from 'cors'
 import mongoose from 'mongoose';
 import path from 'path';
@@ -71,6 +72,10 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api', Routes);
+
+// ✨ NEW AI Chat API (v1) with built-in rules
+app.use('/api/v1/ai-chat', aiChatRouter);
+console.log('✨ New AI Chat API mounted at: /api/v1/ai-chat');
 
 // Serve Static Frontend Files
 const frontendPath = path.join(__dirname, '../frontend/dist');

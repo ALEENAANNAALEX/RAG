@@ -7,6 +7,9 @@ import About from './pages/About';
 import Services from './pages/Services';
 import AiChat from './pages/AiChat';
 import PdfQaBot from './components/Chat';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Payment from './pages/Payment';
 import NotFound from './pages/NotFound';
 import './App.css';
 
@@ -21,6 +24,11 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
             <Route path="/services" element={<Services />} />
+
+            {/* Auth Pages */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/payment" element={<Payment />} />
 
             {/* Chat Pages */}
             <Route path="/chat" element={<PdfQaBot />} />

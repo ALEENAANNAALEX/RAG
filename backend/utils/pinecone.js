@@ -60,7 +60,7 @@ const createIndex = async (name) => {
     return pineconeIndex
 }
 
-const storeDocs = async (docs, clearNamespace = false) => {
+const storeDocs = async (docs, clearNamespace = false, userId = null) => {
     console.log(`📄 Processing ${docs.length} documents.`);
     const splittedDocs = await splitData(docs)
     console.log(`✂️ Data split into ${splittedDocs.length} chunks.`);
@@ -71,7 +71,9 @@ const storeDocs = async (docs, clearNamespace = false) => {
     }
 
     const pineconeIndex = getIndex()
-    const namespace = process.env.PINECONE_NAMESPACE || 'qa-bot-namespace';
+    // Create user-specific namespace to isolate documents per user
+    const baseNamespace = process.env.PINECONE_NAMESPACE || 'qa-bot-namespace';
+    const namespace = userId ? `${baseNamespace}-user-${userId}` : baseNamespace;
 
     if (clearNamespace) {
         console.log(`🧹 Clearing namespace: ${namespace}`);
@@ -90,22 +92,26 @@ const storeDocs = async (docs, clearNamespace = false) => {
     console.log('✅ Documents stored successfully...')
 }
 
-const storeVector = async (file, extension) => {
-    console.log(`� Starting vector storage for ${extension} file...`);
+const storeVector = async (file, extension, userId = null) => {
+    console.log(`🔄 Starting vector storage for ${extension} file (User: ${userId})...`);
     const docs = await loadData(file, extension)
-    await storeDocs(docs, true); // Clear namespace on file upload
+    await storeDocs(docs, false, userId); // Don't clear namespace, just add to user's collection
 }
 
-const getRelevantContext = async (userQuery) => {
+const getRelevantContext = async (userQuery, userId = null) => {
     try {
         const pineconeIndex = getIndex()
+        // Use user-specific namespace to retrieve only their documents
+        const baseNamespace = process.env.PINECONE_NAMESPACE || 'qa-bot-namespace';
+        const namespace = userId ? `${baseNamespace}-user-${userId}` : baseNamespace;
+        
         const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
             pineconeIndex,
-            namespace: process.env.PINECONE_NAMESPACE || 'qa-bot-namespace',
+            namespace: namespace,
         })
 
         const retriever = vectorStore.asRetriever({ k: 3 })
-        console.log(`🔍 Searching Knowledge Base for: "${userQuery}"`);
+        console.log(`🔍 Searching Knowledge Base for: "${userQuery}" (User: ${userId}, Namespace: ${namespace})`);
         const docs = await retriever.invoke(userQuery);
         return docs.map(d => d.pageContent).join("\n\n");
     } catch (error) {
@@ -114,13 +120,18 @@ const getRelevantContext = async (userQuery) => {
     }
 }
 
-const retrieveVector = async (userQuery) => {
-    const context = await getRelevantContext(userQuery);
+const retrieveVector = async (userQuery, userId = null) => {
+    const context = await getRelevantContext(userQuery, userId);
+
+    // If no context found, return a message instead of using general knowledge
+    if (!context || context.trim() === "") {
+        return "I cannot find relevant information in your uploaded documents to answer this question. Please make sure you've uploaded the relevant documents or try rephrasing your question.";
+    }
 
     console.log(`🤖 Generating Groq response...`);
     const response = await llm.invoke({
         question: userQuery,
-        context: context || "No specific background knowledge found. Use your general knowledge.",
+        context: context,
     });
 
     // Handle both mock object response and real string response

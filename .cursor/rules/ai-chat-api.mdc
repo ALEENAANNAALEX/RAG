@@ -1,0 +1,180 @@
+---
+alwaysApply: true
+description: AI Chat API rules and guidelines for the IntelAI RAG system
+---
+
+# AI Chat API Rules
+
+This rule file defines all the business rules, constraints, and guidelines for the AI Chat API located in [aiChatAPI.js](mdc:backend/controllers/aiChatAPI.js).
+
+## Core API Rules
+
+### 1. Rate Limiting Rules
+- **Free Tier**: 10 messages per day, resets every 24 hours
+- **Premium Tier**: Unlimited messages
+- Counter is database-backed and survives server restarts
+- Reset happens automatically when 24 hours have passed since last reset
+
+### 2. Authentication Rules
+- JWT authentication is REQUIRED for all chat endpoints
+- Guest access is NOT allowed
+- Token must be in format: `Authorization: Bearer <token>`
+- Subscription status must be verified for tier determination
+
+### 3. Message Validation Rules
+- Messages are REQUIRED and cannot be empty
+- Minimum length: 1 character
+- Maximum length: 2000 characters
+- Only string type is allowed
+- Whitespace is automatically trimmed
+
+### 4. Session Management Rules
+- Session IDs are optional (auto-generated if not provided)
+- Format: `chat_session_<timestamp>_<random>`
+- Maximum history length: 20 messages (keeps last 20)
+- History is persisted to Pinecone
+- In-memory cache used for active sessions
+
+### 5. RAG (Retrieval-Augmented Generation) Rules
+- RAG is ENABLED by default
+- Top 5 most relevant chunks are retrieved
+- Minimum similarity score: 0.5
+- Free tier users are RESTRICTED to knowledge base queries only
+- If no relevant context found for free users, block the request
+
+### 6. AI Model Rules
+- Provider: Groq
+- Model: llama-3.3-70b-versatile
+- Temperature: 0.5 (balanced creativity/accuracy)
+- Max tokens: 500 per response
+- Timeout: 30 seconds maximum
+
+### 7. Response Format Rules
+- Format: JSON
+- Include metadata by default
+- Include session ID in response
+- Markdown is supported in responses
+- Maximum 2 retries on failure
+
+### 8. Error Handling Rules
+- All errors are logged
+- Detailed error messages in development mode only
+- Production uses sanitized error messages
+- Fallback response: "I apologize, but I'm having trouble processing your request right now."
+
+### 9. Content Policy Rules
+- Moderation is enabled
+- Harmful content is blocked
+- Profanity is allowed (not blocked)
+- Violations are logged for review
+
+## User Tier Differences
+
+### Free Tier
+- 10 messages per day
+- Knowledge base queries ONLY
+- Cannot ask general questions
+- System prompt restricts to company information
+- Blocked if query is outside knowledge base
+
+### Premium Tier
+- Unlimited messages
+- Full AI capabilities
+- Can ask any question (AI, tech, general knowledge)
+- System prompt allows broad assistance
+- No knowledge base restrictions
+
+## API Endpoints
+
+The following endpoints are defined in [aiChatAPI.js](mdc:backend/controllers/aiChatAPI.js):
+
+1. **POST /api/v1/ai-chat** - Main chat endpoint
+2. **POST /api/v1/ai-chat/clear** - Clear chat history
+3. **GET /api/v1/ai-chat/history/:sessionId** - Get conversation history
+4. **GET /api/v1/ai-chat/rules** - Get API rules (for debugging)
+
+## Integration Requirements
+
+When integrating this API, you MUST:
+
+1. Include valid JWT token in Authorization header
+2. Validate message before sending (1-2000 chars)
+3. Handle rate limit errors (429 status)
+4. Handle authentication errors (401 status)
+5. Store and reuse session IDs for conversation continuity
+6. Handle timeout errors gracefully
+
+## Code Standards
+
+When modifying [aiChatAPI.js](mdc:backend/controllers/aiChatAPI.js):
+
+- All rules must be defined in the `API_RULES` object
+- Use helper functions for rule validation
+- Log all significant events with emoji prefixes (🤖, ✅, ❌, etc.)
+- Include detailed comments for each rule section
+- Return consistent JSON error format
+- Always save messages to Pinecone for persistence
+- Update in-memory cache after each message
+
+## Error Codes
+
+The API uses these standard error codes:
+
+- `AUTH_REQUIRED` - Authentication is missing or invalid
+- `INVALID_MESSAGE` - Message validation failed
+- `RATE_LIMIT_EXCEEDED` - Daily message limit reached
+- `AI_ERROR` - AI model generation failed
+- `SERVER_ERROR` - Internal server error
+- `MISSING_SESSION_ID` - Session ID required but not provided
+- `CLEAR_ERROR` - Failed to clear chat history
+- `FETCH_ERROR` - Failed to fetch chat history
+
+## Testing
+
+When testing the AI Chat API:
+
+1. Test rate limiting by sending 11 messages (free tier)
+2. Test knowledge base restriction with general questions (free tier)
+3. Test session persistence by refreshing and loading history
+4. Test message validation with empty and long messages
+5. Test authentication by sending requests without token
+6. Test error handling by causing timeouts or invalid requests
+
+## Performance Targets
+
+- Response time: 1-3 seconds for typical requests
+- Cache hit rate: >80% for active sessions
+- RAG context retrieval: <500ms
+- Message persistence: <200ms (async, doesn't block response)
+- History loading: <500ms
+
+## Security Considerations
+
+- Never expose API keys to frontend
+- Always verify JWT tokens on every request
+- Sanitize error messages in production
+- Log all authentication failures
+- Rate limiting prevents abuse
+- Subscription verification prevents unauthorized premium access
+
+## Dependencies
+
+The AI Chat API depends on:
+
+- [helper.js](mdc:backend/utils/helper.js) - Embeddings and LLM setup
+- MongoDB - User data and rate limiting counters
+- Pinecone - Vector storage and RAG context
+- Groq SDK - AI inference with Llama 3.3
+- JWT - Authentication tokens
+
+## Future Enhancements
+
+Consider these enhancements while maintaining all existing rules:
+
+- Streaming responses (token-by-token)
+- Voice input/output support
+- Multi-modal support (images)
+- Conversation branching
+- Export chat history
+- Analytics dashboard
+- Custom AI personalities

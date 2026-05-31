@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Upload, Send, FileText, MessageCircle, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, Send, FileText, MessageCircle, Loader2, AlertCircle, CheckCircle, Lock } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const PdfQaBot = () => {
     let API_URL = import.meta.env.VITE_API_URL;
@@ -7,12 +8,29 @@ const PdfQaBot = () => {
         API_URL = API_URL.endsWith('/') ? `${API_URL}api` : `${API_URL}/api`;
     }
 
+    const [user, setUser] = useState(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const navigate = useNavigate();
+
     const [file, setFile] = useState(null);
     const [query, setQuery] = useState('');
     const [messages, setMessages] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [isQuerying, setIsQuerying] = useState(false);
     const [uploadStatus, setUploadStatus] = useState(null);
+
+    // Check authentication
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        const userData = localStorage.getItem('user');
+        
+        if (!token || !userData) {
+            setIsAuthenticated(false);
+        } else {
+            setUser(JSON.parse(userData));
+            setIsAuthenticated(true);
+        }
+    }, []);
 
     // Debugging log to see the resolved URL in browser console
     console.log("Resolved API Endpoint:", API_URL);
@@ -45,6 +63,21 @@ const PdfQaBot = () => {
             return;
         }
 
+        // Check authentication
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+
+        // Check if user has reached limit (on frontend before upload)
+        const maxDocs = user?.hasSubscription ? -1 : 2;
+        const currentDocs = user?.documentsUploaded || 0;
+        
+        if (maxDocs !== -1 && currentDocs >= maxDocs) {
+            // Already at limit - shouldn't happen as button is disabled
+            return;
+        }
+
         setIsUploading(true);
         const formData = new FormData();
         formData.append('file', file);
@@ -57,8 +90,12 @@ const PdfQaBot = () => {
         }
 
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
                 body: formData,
             });
 
@@ -72,10 +109,24 @@ const PdfQaBot = () => {
 
             if (response.ok) {
                 setUploadStatus('success');
-                setMessages([{ type: 'bot', content: '✨ Document processed! I\'ve indexed the content and I\'m ready for your questions.' }]);
+                const documentsInfo = data.documentsUploaded && data.maxDocuments 
+                    ? ` (${data.documentsUploaded}/${data.maxDocuments === 'unlimited' ? '∞' : data.maxDocuments} documents uploaded)`
+                    : '';
+                setMessages([{ type: 'bot', content: `✨ Document processed! I've indexed the content and I'm ready for your questions.${documentsInfo}` }]);
+                
+                // Update user data in localStorage and state
+                if (user && data.documentsUploaded) {
+                    const updatedUser = { ...user, documentsUploaded: data.documentsUploaded };
+                    setUser(updatedUser);
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                }
             } else {
                 setUploadStatus('error');
-                alert(`Upload failed: ${data.message || data.error || 'Unknown error'}`);
+                if (data.requiresUpgrade || data.requiresAuth || data.requiresSubscription) {
+                    setMessages([{ type: 'error', content: `❌ ${data.message}` }]);
+                } else {
+                    setMessages([{ type: 'error', content: `❌ Upload failed: ${data.message || data.error || 'Unknown error'}` }]);
+                }
             }
         } catch (error) {
             setUploadStatus('error');
@@ -89,6 +140,12 @@ const PdfQaBot = () => {
         if (e) e.preventDefault();
         if (!query.trim() || isQuerying) return;
 
+        // Check authentication
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+
         const userMessage = { type: 'user', content: query };
         setMessages(prev => [...prev, userMessage]);
         const currentQuery = query;
@@ -96,21 +153,53 @@ const PdfQaBot = () => {
         setIsQuerying(true);
 
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch(`${API_URL}/query`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ query: currentQuery.trim() }),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                const botMessage = {
-                    type: 'bot',
-                    content: data.data || 'I couldn\'t find a specific answer in the document for that.'
-                };
-                setMessages(prev => [...prev, botMessage]);
+                if (data.success) {
+                    const botMessage = {
+                        type: 'bot',
+                        content: data.data || 'I couldn\'t find a specific answer in the document for that.'
+                    };
+                    setMessages(prev => [...prev, botMessage]);
+                } else {
+                    // Check if it's a "no documents" error
+                    if (data.message && data.message.includes('upload a document first')) {
+                        setMessages(prev => [...prev, { 
+                            type: 'error', 
+                            content: '📄 Please upload a document first before asking questions.' 
+                        }]);
+                    } else if (data.requiresUpgrade || data.requiresAuth || data.requiresSubscription) {
+                        setMessages(prev => [...prev, { type: 'error', content: `❌ ${data.message}` }]);
+                        setTimeout(() => navigate('/pricing'), 2000);
+                    } else {
+                        setMessages(prev => [...prev, { type: 'error', content: `❌ ${data.message || 'Unknown error'}` }]);
+                    }
+                }
             } else {
-                setMessages(prev => [...prev, { type: 'error', content: 'Connection issue. Please check the server.' }]);
+                // Check if response is 400 (Bad Request) for no documents
+                if (response.status === 400) {
+                    const data = await response.json();
+                    if (data.message && data.message.includes('upload a document first')) {
+                        setMessages(prev => [...prev, { 
+                            type: 'error', 
+                            content: '📄 Please upload a document first before asking questions.' 
+                        }]);
+                    } else {
+                        setMessages(prev => [...prev, { type: 'error', content: `❌ ${data.message || 'Please upload a document first.'}` }]);
+                    }
+                } else {
+                    setMessages(prev => [...prev, { type: 'error', content: 'Connection issue. Please check the server.' }]);
+                }
             }
         } catch (error) {
             setMessages(prev => [...prev, { type: 'error', content: 'Network error. Make sure the backend is running.' }]);
@@ -280,43 +369,112 @@ const PdfQaBot = () => {
             }} />
 
             <div style={{ ...styles.wrapper, position: 'relative', zIndex: 1 }}>
-                {/* Header removed as Navbar is present */}
+                {/* User Info Banner */}
+                {user && !user.hasSubscription && (
+                    <div style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        borderRadius: '12px',
+                        padding: '1rem 1.5rem',
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '1rem'
+                    }}>
+                        <div>
+                            <div style={{ color: '#93c5fd', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                                📦 Free Tier: {user.documentsUploaded || 0}/2 documents uploaded
+                            </div>
+                            <div style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+                                Upgrade for unlimited documents and features
+                            </div>
+                        </div>
+                        <Link 
+                            to="/pricing" 
+                            style={{
+                                background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                                color: 'white',
+                                padding: '0.5rem 1.5rem',
+                                borderRadius: '8px',
+                                textDecoration: 'none',
+                                fontWeight: 600,
+                                fontSize: '0.9rem',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            Upgrade Now
+                        </Link>
+                    </div>
+                )}
 
                 {/* Glassmorphic Upload Card */}
                 <div style={styles.glassCard}>
                     <div style={styles.uploadZone}>
-                        <input id="file-input" type="file" onChange={handleFileChange} style={styles.fileInput} />
-                        <label
-                            htmlFor="file-input"
-                            style={{
-                                ...styles.customFileBtn,
-                                borderColor: file ? '#818cf8' : 'rgba(129, 140, 248, 0.3)',
-                                background: file ? 'rgba(129, 140, 248, 0.1)' : 'transparent'
-                            }}
-                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#818cf8'; }}
-                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; if (!file) e.currentTarget.style.borderColor = 'rgba(129, 140, 248, 0.3)'; }}
-                        >
-                            <Upload size={24} />
-                            <span>{file ? file.name : 'Choose PDF, CSV, or TXT'}</span>
-                        </label>
+                        {(() => {
+                            const maxDocs = user?.hasSubscription ? -1 : 2;
+                            const currentDocs = user?.documentsUploaded || 0;
+                            const limitReached = maxDocs !== -1 && currentDocs >= maxDocs;
 
-                        {uploadStatus === 'success' ? (
-                            <button onClick={handleReplaceFile} style={{ ...styles.primaryBtn, background: '#10b981' }}>
-                                <CheckCircle size={20} />
-                                Linked
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleUpload}
-                                disabled={!file || isUploading}
-                                style={{ ...styles.primaryBtn, opacity: (!file || isUploading) ? 0.6 : 1 }}
-                                onMouseOver={(e) => { if (file && !isUploading) e.currentTarget.style.boxShadow = '0 15px 30px rgba(99, 102, 241, 0.5)'; }}
-                                onMouseOut={(e) => { e.currentTarget.style.boxShadow = '0 10px 20px rgba(99, 102, 241, 0.3)'; }}
-                            >
-                                {isUploading ? <Loader2 className="animate-spin" size={20} /> : <FileText size={20} />}
-                                {isUploading ? 'Syncing...' : 'Process Doc'}
-                            </button>
-                        )}
+                            return (
+                                <>
+                                    <input 
+                                        id="file-input" 
+                                        type="file" 
+                                        onChange={handleFileChange} 
+                                        style={styles.fileInput}
+                                        disabled={limitReached}
+                                    />
+                                    <label
+                                        htmlFor="file-input"
+                                        style={{
+                                            ...styles.customFileBtn,
+                                            borderColor: limitReached ? 'rgba(239, 68, 68, 0.3)' : (file ? '#818cf8' : 'rgba(129, 140, 248, 0.3)'),
+                                            background: limitReached ? 'rgba(239, 68, 68, 0.1)' : (file ? 'rgba(129, 140, 248, 0.1)' : 'transparent'),
+                                            opacity: limitReached ? 0.6 : 1,
+                                            cursor: limitReached ? 'not-allowed' : 'pointer'
+                                        }}
+                                        onMouseOver={(e) => { 
+                                            if (!limitReached) {
+                                                e.currentTarget.style.transform = 'translateY(-2px)'; 
+                                                e.currentTarget.style.borderColor = '#818cf8'; 
+                                            }
+                                        }}
+                                        onMouseOut={(e) => { 
+                                            e.currentTarget.style.transform = 'translateY(0)'; 
+                                            if (!file && !limitReached) e.currentTarget.style.borderColor = 'rgba(129, 140, 248, 0.3)'; 
+                                        }}
+                                    >
+                                        <Upload size={24} />
+                                        <span>
+                                            {limitReached 
+                                                ? '🔒 Upload Limit Reached (2/2)' 
+                                                : (file ? file.name : 'Choose PDF, CSV, or TXT')
+                                            }
+                                        </span>
+                                    </label>
+
+                                    {uploadStatus === 'success' ? (
+                                        <button onClick={handleReplaceFile} style={{ ...styles.primaryBtn, background: '#10b981' }}>
+                                            <CheckCircle size={20} />
+                                            Linked
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleUpload}
+                                            disabled={!file || isUploading || limitReached}
+                                            style={{ ...styles.primaryBtn, opacity: (!file || isUploading || limitReached) ? 0.6 : 1 }}
+                                            onMouseOver={(e) => { if (file && !isUploading && !limitReached) e.currentTarget.style.boxShadow = '0 15px 30px rgba(99, 102, 241, 0.5)'; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.boxShadow = '0 10px 20px rgba(99, 102, 241, 0.3)'; }}
+                                        >
+                                            {isUploading ? <Loader2 className="animate-spin" size={20} /> : <FileText size={20} />}
+                                            {isUploading ? 'Syncing...' : (limitReached ? 'Upgrade Required' : 'Process Doc')}
+                                        </button>
+                                    )}
+                                </>
+                            );
+                        })()}
                     </div>
                 </div>
 

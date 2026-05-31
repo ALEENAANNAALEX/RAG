@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Send, Sparkles, Trash2, Loader2, Bot, User } from 'lucide-react';
+import { Send, Sparkles, Trash2, Loader2, Bot, User, Lock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 const AiChat = () => {
@@ -11,52 +11,84 @@ const AiChat = () => {
             : import.meta.env.VITE_API_URL + '/api')
         : '/api';
 
-    const [userMetaData, setUserMetaData] = useState(() => {
-        const saved = localStorage.getItem('chatUser');
-        return saved ? JSON.parse(saved) : null;
-    });
-    const [serverId, setServerId] = useState("Connecting...");
+    const [user, setUser] = useState(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-    const [messages, setMessages] = useState(() => {
-        const saved = localStorage.getItem('chatMessages');
-        return saved ? JSON.parse(saved) : [
-            {
-                role: 'assistant',
-                content: 'Hello! Welcome 😊 Please share your name and email to continue.'
-            }
-        ];
-    });
+    const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [sessionId, setSessionId] = useState(() => {
-        return localStorage.getItem('chatSessionId') || `session_${Date.now()}`;
+        const token = localStorage.getItem('token');
+        // Only load sessionId if user is logged in
+        return token ? (localStorage.getItem('chatSessionId') || `session_${Date.now()}`) : null;
     });
     const messagesEndRef = useRef(null);
     const navigate = useNavigate();
 
+    // Check authentication and set initial greeting
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        const userData = localStorage.getItem('user');
+        
+        if (!token || !userData) {
+            setIsAuthenticated(false);
+            // Clear messages if not authenticated
+            setMessages([]);
+            setSessionId(null);
+        } else {
+            const parsedUser = JSON.parse(userData);
+            setUser(parsedUser);
+            setIsAuthenticated(true);
+            
+            // Load saved messages only if authenticated
+            const saved = localStorage.getItem('chatMessages');
+            if (saved && JSON.parse(saved).length > 0) {
+                setMessages(JSON.parse(saved));
+            } else {
+                // Set initial greeting if no messages
+                setMessages([{
+                    role: 'assistant',
+                    content: `Hello ${parsedUser.name}! 👋 Welcome to Intel AI Assistant. How can I help you today?`
+                }]);
+            }
+            
+            // Set or create session ID
+            const existingSessionId = localStorage.getItem('chatSessionId');
+            if (existingSessionId) {
+                setSessionId(existingSessionId);
+            } else {
+                const newSessionId = `session_${Date.now()}`;
+                setSessionId(newSessionId);
+                localStorage.setItem('chatSessionId', newSessionId);
+            }
+        }
+    }, []);
+
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 100);
     };
 
     useEffect(() => {
         // Save state to local storage whenever it changes
-        if (userMetaData) localStorage.setItem('chatUser', JSON.stringify(userMetaData));
         if (sessionId) localStorage.setItem('chatSessionId', sessionId);
         localStorage.setItem('chatMessages', JSON.stringify(messages));
-    }, [messages, userMetaData, sessionId]);
+        // Scroll to bottom when messages change
+        scrollToBottom();
+    }, [messages, sessionId]);
 
     useEffect(() => {
-        // Fetch server ID on startup
-        fetch(`${API_URL.replace('/api', '')}/health`)
-            .then(res => res.json())
-            .then(data => setServerId(data.serverId || "Unknown"))
-            .catch(err => setServerId("Offline"));
-
         // Load history from Pinecone if we already have a session
         const loadHistory = async () => {
-            if (userMetaData && sessionId) {
+            if (isAuthenticated && sessionId) {
                 try {
-                    const response = await fetch(`${API_URL}/chat/history/${sessionId}`);
+                    const token = localStorage.getItem('token');
+                    const response = await fetch(`${API_URL}/chat/history/${sessionId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
                     const data = await response.json();
                     if (data.success && data.data.length > 0) {
                         setMessages(data.data);
@@ -68,16 +100,22 @@ const AiChat = () => {
         };
 
         loadHistory();
-        scrollToBottom();
-    }, []);
+    }, [isAuthenticated]);
 
+    // Scroll to bottom on mount and when messages load
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, []);
 
     const handleSend = async (e) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
+
+        // Check if user is authenticated
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
 
         const userMessage = input.trim();
         setInput('');
@@ -85,70 +123,16 @@ const AiChat = () => {
         const newMessages = [...messages, { role: 'user', content: userMessage }];
         setMessages(newMessages);
 
-        // Lead Generation Phase - RESTORED
-        if (!userMetaData) {
-            setIsLoading(true);
-
-            // Simple check for name and email in the string
-            const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
-            const emailMatch = userMessage.match(emailRegex);
-
-            if (emailMatch) {
-                const email = emailMatch[0];
-                let name = userMessage.split(/[, ]+/)[0];
-                const newUserData = { name, email };
-                setUserMetaData(newUserData);
-                localStorage.setItem('chatUser', JSON.stringify(newUserData));
-
-                // Even though we validated locally, we still send a "ping" to the backend to start the session in Pinecone
-                try {
-                    await fetch(`${API_URL}/chat`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: `USER_AUTH: ${name} (${email})`,
-                            sessionId
-                        }),
-                    });
-                } catch (e) { console.error("Sync error:", e); }
-
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `Thank you, ${name}. How can I help you today?`
-                }]);
-            } else {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `I'm sorry, I need your name and email address (e.g., abc, abc@gmail.com) to continue.`
-                }]);
-            }
-            setIsLoading(false);
-            return;
-        }
-
-        // Standard AI Chat Phase
-        const today = new Date().toISOString().split('T')[0];
-        const storedUsage = JSON.parse(localStorage.getItem('chatUsage') || '{"count": 0, "date": ""}');
-
-        if (storedUsage.date !== today) {
-            storedUsage.count = 0;
-            storedUsage.date = today;
-        }
-
-        if (storedUsage.count >= 50) {
-            navigate('/pricing');
-            return;
-        }
-
-        storedUsage.count += 1;
-        localStorage.setItem('chatUsage', JSON.stringify(storedUsage));
-
         setIsLoading(true);
 
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch(`${API_URL}/chat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ message: userMessage, sessionId }),
             });
 
@@ -157,10 +141,19 @@ const AiChat = () => {
             if (data.success) {
                 setMessages(prev => [...prev, { role: 'assistant', content: data.data }]);
             } else {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: '❌ Sorry, I encountered an error. Please try again.'
-                }]);
+                // Check if subscription is required
+                if (data.requiresSubscription || data.requiresAuth) {
+                    setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: `❌ ${data.message} Please upgrade your subscription to continue.`
+                    }]);
+                    setTimeout(() => navigate('/pricing'), 2000);
+                } else {
+                    setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: '❌ Sorry, I encountered an error. Please try again.'
+                    }]);
+                }
             }
         } catch (error) {
             console.error('Chat error:', error);
@@ -175,24 +168,26 @@ const AiChat = () => {
 
     const handleClear = async () => {
         try {
+            const token = localStorage.getItem('token');
             await fetch(`${API_URL}/chat/clear`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ sessionId }),
             });
 
-            // Reset everything to force name/email collection again
-            localStorage.removeItem('chatUser');
+            // Reset chat history
             localStorage.removeItem('chatSessionId');
             localStorage.removeItem('chatMessages');
 
-            setUserMetaData(null);
             const newSid = `session_${Date.now()}`;
             setSessionId(newSid);
             localStorage.setItem('chatSessionId', newSid);
 
             setMessages([
-                { role: 'assistant', content: 'History cleared! Hello! Welcome 😊 Please share your name and email to continue.' }
+                { role: 'assistant', content: `Hello ${user.name}! 👋 Chat history cleared. How can I help you today?` }
             ]);
 
         } catch (error) {
@@ -202,6 +197,48 @@ const AiChat = () => {
 
     return (
         <div className="page-container" style={{ paddingTop: '5rem', paddingBottom: '2rem' }}>
+            {!isAuthenticated && (
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        marginBottom: '2rem',
+                        textAlign: 'center',
+                        maxWidth: '900px',
+                        margin: '0 auto 2rem'
+                    }}
+                >
+                    <Lock size={32} color="#3b82f6" style={{ margin: '0 auto 1rem' }} />
+                    <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: 700 }}>
+                        Authentication Required
+                    </h3>
+                    <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
+                        Please log in to access AI Chat and enjoy unlimited conversations
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                        <Link to="/login" className="btn-primary" style={{ padding: '0.75rem 1.5rem' }}>
+                            Login
+                        </Link>
+                        <Link 
+                            to="/signup" 
+                            style={{
+                                padding: '0.75rem 1.5rem',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                borderRadius: '8px',
+                                textDecoration: 'none',
+                                color: 'white'
+                            }}
+                        >
+                            Sign Up
+                        </Link>
+                    </div>
+                </motion.div>
+            )}
+            
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -218,9 +255,9 @@ const AiChat = () => {
             </motion.div>
 
             <div className="card" style={{
-                maxWidth: '900px',
+                maxWidth: '1200px',
                 margin: '0 auto',
-                height: '500px',
+                height: '700px',
                 display: 'flex',
                 flexDirection: 'column'
             }}>
